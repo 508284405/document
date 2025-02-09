@@ -1,8 +1,10 @@
 package com.yuwang.shorturlserver.adapter.vo;
 
 import lombok.Builder;
+import lombok.Getter;
 
 @Builder
+@Getter
 public class BaseResult<T> {
     public static final int SUCCESS = 0;
     public static final int FAILED = 1;

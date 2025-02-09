@@ -1,27 +1,22 @@
 package com.yuwang.shorturlserver.domain.model;
 
-import com.baomidou.mybatisplus.annotation.IdType;
-import com.baomidou.mybatisplus.annotation.TableField;
-import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
+import lombok.EqualsAndHashCode;
+import lombok.ToString;
 
 import java.time.LocalDateTime;
 
+@EqualsAndHashCode(callSuper = true)
+@ToString(callSuper = true)
 @Data
 @TableName("urls")
-public class UrlEntity {
-    @TableId(type = IdType.INPUT)
+public class UrlEntity extends BaseEntity{
     private String shortCode; // as the primary key
 
     private String longUrl;
 
-    @TableField("created_at")
-    private LocalDateTime createdAt;
-
-    @TableField("expires_at")
     private LocalDateTime expiresAt;
 
-    @TableField("click_count")
     private Long clickCount;
 }

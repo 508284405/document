@@ -1,10 +1,15 @@
 package com.yuwang.shorturlserver.domain.service;
 
+import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.metadata.IPage;
+import com.baomidou.mybatisplus.core.toolkit.Wrappers;
+import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.yuwang.shorturlserver.adapter.cmd.ShortUrlCmd;
 import com.yuwang.shorturlserver.adapter.exception.BusinessException;
 import com.yuwang.shorturlserver.domain.model.UrlEntity;
 import com.yuwang.shorturlserver.domain.repository.ShortUrlMapper;
 import lombok.AllArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.redisson.api.RBloomFilter;
 import org.redisson.api.RBucket;
 import org.redisson.api.RLock;
@@ -19,13 +24,15 @@ import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.LocalDateTime;
 
+@Slf4j
 @Service
 @AllArgsConstructor
 public class ShortUrlService {
     // MyBatis-Plus mapper
-    private final ShortUrlMapper urlMapper;
+    private final ShortUrlMapper shortUrlMapper;
     private final RedissonClient redissonClient;
     private final StringRedisTemplate redisTemplate;
+
     public String createShortUrl(ShortUrlCmd request) {
         // 1) Validate the request
         // 2) Generate or validate custom alias
@@ -37,7 +44,7 @@ public class ShortUrlService {
         // 3) Check if code exists in DB or Redis
         String cacheKey = "url:" + shortCode;
         RBucket<String> bucket = redissonClient.getBucket(cacheKey);
-        if (bucket.isExists() || urlMapper.selectById(shortCode) != null) {
+        if (bucket.isExists() || shortUrlMapper.selectOne(Wrappers.lambdaQuery(UrlEntity.class).eq(UrlEntity::getShortCode, shortCode)) != null) {
             // if shortCode is not unique, handle collision or throw exception
             throw new BusinessException("Short code is not unique");
         }
@@ -47,9 +54,8 @@ public class ShortUrlService {
         entity.setShortCode(shortCode);
         entity.setLongUrl(originalUrl);
         entity.setExpiresAt(request.getExpiresAt());
-        entity.setCreatedAt(LocalDateTime.now());
         entity.setClickCount(0L);
-        urlMapper.insert(entity);
+        shortUrlMapper.insert(entity);
 
         // 5) Cache in Redis
         redisTemplate.opsForValue().set(cacheKey, originalUrl);
@@ -73,7 +79,7 @@ public class ShortUrlService {
         }
 
         // 2) If not found in cache, query DB
-        UrlEntity entity = urlMapper.selectById(shortCode);
+        UrlEntity entity = shortUrlMapper.selectById(shortCode);
         if (entity == null) {
             return null; // short code not found
         }
@@ -102,10 +108,10 @@ public class ShortUrlService {
         RLock lock = redissonClient.getLock("lock:count:" + shortCode);
         try {
             lock.lock();
-            UrlEntity entity = urlMapper.selectById(shortCode);
+            UrlEntity entity = shortUrlMapper.selectById(shortCode);
             if (entity != null) {
                 entity.setClickCount(entity.getClickCount() + 1);
-                urlMapper.updateById(entity);
+                shortUrlMapper.updateById(entity);
             }
         } finally {
             lock.unlock();
@@ -113,58 +119,61 @@ public class ShortUrlService {
     }
 
     private String generateShortCode(String longUrl) {
-    // 1) Hash the long URL using SHA-256 and convert to Base62
-    String hashValue = generateHash(longUrl);
+        // 1) Hash the long URL using SHA-256 and convert to Base62
+        String hashValue = generateHash(longUrl);
 
-    // 2) Take the first 7 characters from the hash value for the short code
-    String shortCode = hashValue.substring(0, 7);
+        // 2) Take the first 7 characters from the hash value for the short code
+        String shortCode = hashValue.substring(0, 7);
 
-    // 3) Use Redisson Bloom Filter to check for hash conflicts
-    RBloomFilter<String> bloomFilter = redissonClient.getBloomFilter("urlBloomFilter");
+        // 3) Use Redisson Bloom Filter to check for hash conflicts
+        RBloomFilter<String> bloomFilter = redissonClient.getBloomFilter("urlBloomFilter");
+        if (bloomFilter.tryInit(1000000, 0.01)) {
+            log.info("Bloom Filter initialized: expectedInsertions={},falseProbability={}", 1000000, 0.01);
+        }
 
-    // If the short code already exists in the Bloom Filter, it means we have a conflict
-    if (bloomFilter.contains(shortCode)) {
-        // Conflict detected, apply hash+ logic by adding salt to avoid collision
-        String newHashValue = generateHash(longUrl + System.nanoTime()); // Adding salt
-        shortCode = newHashValue.substring(0, 7);  // Take the first 7 characters of the new hash
+        // If the short code already exists in the Bloom Filter, it means we have a conflict
+        if (bloomFilter.contains(shortCode)) {
+            // Conflict detected, apply hash+ logic by adding salt to avoid collision
+            String newHashValue = generateHash(longUrl + System.nanoTime()); // Adding salt
+            shortCode = newHashValue.substring(0, 7);  // Take the first 7 characters of the new hash
+        }
+
+        // 4) Add the new shortCode to the Bloom Filter to prevent future conflicts
+        bloomFilter.add(shortCode);
+
+        return shortCode;
     }
 
-    // 4) Add the new shortCode to the Bloom Filter to prevent future conflicts
-    bloomFilter.add(shortCode);
+    // Helper method to generate SHA-256 hash and convert it to Base62
+    private String generateHash(String input) {
+        try {
+            // SHA-256 hash generation
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] hashBytes = digest.digest(input.getBytes(StandardCharsets.UTF_8));
 
-    return shortCode;
-}
-
-// Helper method to generate SHA-256 hash and convert it to Base62
-private String generateHash(String input) {
-    try {
-        // SHA-256 hash generation
-        MessageDigest digest = MessageDigest.getInstance("SHA-256");
-        byte[] hashBytes = digest.digest(input.getBytes(StandardCharsets.UTF_8));
-        
-        // Convert the hash bytes to Base62
-        return base62Encode(hashBytes);
-    } catch (NoSuchAlgorithmException e) {
-        throw new RuntimeException("Hashing algorithm error", e);
-    }
-}
-
-// Helper method to encode bytes in Base62
-private String base62Encode(byte[] input) {
-    final String base62Chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
-    BigInteger bigInt = new BigInteger(1, input);
-    StringBuilder sb = new StringBuilder();
-
-    while (bigInt.compareTo(BigInteger.ZERO) > 0) {
-        BigInteger[] divRem = bigInt.divideAndRemainder(BigInteger.valueOf(62));
-        bigInt = divRem[0];
-        int remainder = divRem[1].intValue();
-        sb.insert(0, base62Chars.charAt(remainder));
+            // Convert the hash bytes to Base62
+            return base62Encode(hashBytes);
+        } catch (NoSuchAlgorithmException e) {
+            throw new RuntimeException("Hashing algorithm error", e);
+        }
     }
 
-    // If the hash was 0, represent it as '0'
-    return !sb.isEmpty() ? sb.toString() : "0";
-}
+    // Helper method to encode bytes in Base62
+    private String base62Encode(byte[] input) {
+        final String base62Chars = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
+        BigInteger bigInt = new BigInteger(1, input);
+        StringBuilder sb = new StringBuilder();
+
+        while (bigInt.compareTo(BigInteger.ZERO) > 0) {
+            BigInteger[] divRem = bigInt.divideAndRemainder(BigInteger.valueOf(62));
+            bigInt = divRem[0];
+            int remainder = divRem[1].intValue();
+            sb.insert(0, base62Chars.charAt(remainder));
+        }
+
+        // If the hash was 0, represent it as '0'
+        return !sb.isEmpty() ? sb.toString() : "0";
+    }
 
 
     private String validateCustomAlias(String customAlias) {
@@ -172,4 +181,9 @@ private String base62Encode(byte[] input) {
         // if invalid, throw an exception
         return customAlias;
     }
+
+    public IPage<UrlEntity> page(Page<UrlEntity> page, LambdaQueryWrapper<UrlEntity> queryWrapper) {
+        return shortUrlMapper.selectPage(page, queryWrapper);
+    }
+
 }
