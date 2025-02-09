@@ -11,5 +11,5 @@ public class ShortUrlProperties {
     /**
      * 短链接域名前缀，默认为 https://short.ly
      */
-    private String domainPrefix = "https://short.ly";
+    private String domainPrefix = "http://localhost.8080/api/shorturls";
 }

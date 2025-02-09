@@ -36,7 +36,7 @@ public class ShortUrlService {
     public String createShortUrl(ShortUrlCmd request) {
         // 1) Validate the request
         // 2) Generate or validate custom alias
-        String originalUrl = request.getOriginalUrl();
+        String originalUrl = request.getLongUrl();
         String shortCode = (request.getShortCode() != null && !request.getShortCode().isEmpty())
                 ? validateCustomAlias(request.getShortCode())
                 : generateShortCode(originalUrl);

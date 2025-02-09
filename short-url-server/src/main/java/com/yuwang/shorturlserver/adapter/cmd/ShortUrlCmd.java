@@ -6,7 +6,7 @@ import java.time.LocalDateTime;
 
 @Data
 public class ShortUrlCmd {
-    private String originalUrl;
+    private String longUrl;
     private String shortCode;
     private LocalDateTime expiresAt;
 }

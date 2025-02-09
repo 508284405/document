@@ -12,13 +12,13 @@ import com.yuwang.shorturlserver.adapter.vo.ShortUrlVO;
 import com.yuwang.shorturlserver.config.ShortUrlProperties;
 import com.yuwang.shorturlserver.domain.model.UrlEntity;
 import com.yuwang.shorturlserver.domain.service.ShortUrlService;
-import jakarta.servlet.http.HttpServletResponse;
 import lombok.AllArgsConstructor;
-import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.util.StringUtils;
 import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RestController;
 
 import java.util.List;
 import java.util.stream.Collectors;
@@ -36,7 +36,6 @@ public class ShortUrlController {
     private final ShortUrlService shortUrlService;
     private final ShortUrlProperties shortUrlProperties;
 
-
     // 1) Create a new short URL
     @PostMapping("/shorten")
     public BaseResult<String> createShortUrl(@RequestBody @Validated ShortUrlCmd cmd) {
@@ -46,21 +45,7 @@ public class ShortUrlController {
         return BaseResult.success(shortUrl);
     }
 
-    // 2) Redirect to the long URL
-    @GetMapping("/{shortCode}")
-    public ResponseEntity<Void> redirectToLongUrl(@PathVariable String shortCode, HttpServletResponse httpResponse) {
-        String longUrl = shortUrlService.getLongUrl(shortCode);
-        if (longUrl == null) {
-            // handle error: short code not found or expired
-            return ResponseEntity.notFound().build();
-        }
-        // Perform redirection
-        httpResponse.setHeader("Location", longUrl);
-        httpResponse.setStatus(HttpServletResponse.SC_MOVED_PERMANENTLY);
-        return ResponseEntity.status(HttpStatus.MOVED_PERMANENTLY).build();
-    }
-
-    // 3) Query short URL list with pagination
+    // 2) Query short URL list with pagination
     @PostMapping("/list")
     public PageResult<List<ShortUrlVO>> listShortUrls(@RequestBody @Validated ShortUrlQueryCmd queryCmd) {
         Page<UrlEntity> page = new Page<>(queryCmd.getPageNum(), queryCmd.getPageSize());
@@ -73,7 +58,7 @@ public class ShortUrlController {
             queryWrapper.like(UrlEntity::getLongUrl, queryCmd.getLongUrl());
         }
 
-        queryWrapper.orderByDesc(UrlEntity::getCreateTime);
+        queryWrapper.orderByDesc(UrlEntity::getCreateTime, UrlEntity::getId);
         IPage<UrlEntity> pageResult = shortUrlService.page(page, queryWrapper);
 
         List<ShortUrlVO> voList = pageResult.getRecords().stream()
