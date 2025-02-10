@@ -10,7 +10,7 @@ public class PageResult<T> extends BaseResult<T> {
     private final long pages;
 
     private PageResult(int code, String message, T data, String requestId,
-                      long total, long pageSize, long current, long pages) {
+                       long total, long pageSize, long current, long pages) {
         super(code, message, data, requestId);
         this.total = total;
         this.pageSize = pageSize;
@@ -19,7 +19,7 @@ public class PageResult<T> extends BaseResult<T> {
     }
 
     public static <T> PageResult<T> success(T data, long total, long pageSize, long current) {
-        long pages = (total + pageSize - 1) / pageSize;
+        long pages = (total / pageSize) + 1;
         return new PageResult<>(SUCCESS, SUCCESS_STR, data, null, total, pageSize, current, pages);
     }
 
