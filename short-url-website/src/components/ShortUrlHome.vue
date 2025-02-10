@@ -61,7 +61,7 @@
 
       <div class="pagination" v-if="total > 0">
         <button :disabled="current <= 1" @click="changePage(current - 1)">上一页</button>
-        <span>{{ current }} / {{ pages }}</span>
+        <span>第 {{ current }} 页 / 共 {{ pages }} 页 (总记录数: {{ total }})</span>
         <button :disabled="current >= pages" @click="changePage(current + 1)">下一页</button>
       </div>
     </div>
@@ -148,9 +148,9 @@ export default {
         const result = await response.json();
         if (result.code === 0) {
           urlList.value = result.data;
-          total.value = result.total;
-          pages.value = result.pages;
-          current.value = result.current;
+          total.value = result.total || 0;
+          pages.value = Math.ceil(total.value / pageSize.value);
+          current.value = result.current || current.value;
         } else {
           error.value = result.message || '获取列表失败';
         }
@@ -355,6 +355,31 @@ button:disabled {
   justify-content: center;
   align-items: center;
   gap: 15px;
+  margin-top: 20px;
+  padding: 10px;
+  background: #f5f5f5;
+  border-radius: 4px;
+}
+
+.pagination button {
+  min-width: 80px;
+  background-color: #1890ff;
+  transition: all 0.3s;
+}
+
+.pagination button:hover:not(:disabled) {
+  background-color: #40a9ff;
+}
+
+.pagination button:disabled {
+  background-color: #d9d9d9;
+  color: #999;
+}
+
+.pagination span {
+  font-size: 14px;
+  color: #666;
+  padding: 0 10px;
 }
 
 .no-data {
