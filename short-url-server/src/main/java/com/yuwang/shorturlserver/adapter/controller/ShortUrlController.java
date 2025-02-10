@@ -41,7 +41,7 @@ public class ShortUrlController {
     public BaseResult<String> createShortUrl(@RequestBody @Validated ShortUrlCmd cmd) {
         // request contains longUrl, custom alias (optional), expiration data, etc.
         String shortCode = shortUrlService.createShortUrl(cmd);
-        String shortUrl = shortUrlProperties.getDomainPrefix() + "/" + shortCode;
+        String shortUrl = shortUrlProperties.getDomainPrefix() + shortCode;
         return BaseResult.success(shortUrl);
     }
 
@@ -64,7 +64,7 @@ public class ShortUrlController {
         List<ShortUrlVO> voList = pageResult.getRecords().stream()
                 .map(entity -> {
                     ShortUrlVO vo = new ShortUrlVO();
-                    vo.setShortCode(entity.getShortCode());
+                    vo.setShortCode(shortUrlProperties.getDomainPrefix() + entity.getShortCode());
                     vo.setLongUrl(entity.getLongUrl());
                     vo.setExpiresAt(entity.getExpiresAt());
                     vo.setClickCount(entity.getClickCount());

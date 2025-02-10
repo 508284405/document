@@ -11,8 +11,7 @@ spring:
     driver-class-name: com.mysql.cj.jdbc.Driver
   data:
     redis:
-      host: localhost
-      port: 55000
+      url: redis://localhost:55000
       database: 0
 
 
