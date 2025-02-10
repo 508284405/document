@@ -43,15 +43,17 @@
             <th>创建时间</th>
             <th>过期时间</th>
             <th>点击次数</th>
+            <th>状态</th>
           </tr>
         </thead>
         <tbody>
           <tr v-for="url in urlList" :key="url.shortCode">
-            <td><a :href="getFullShortUrl(url.shortCode)" target="_blank">{{ url.shortCode }}</a></td>
+            <td><a :href="url.shortUrl" target="_blank">{{ url.shortCode }}</a></td>
             <td class="long-url">{{ url.longUrl }}</td>
             <td>{{ formatDate(url.createTime) }}</td>
             <td>{{ formatDate(url.expiresAt) }}</td>
             <td>{{ url.clickCount }}</td>
+            <td :class="{ 'expired': isExpired(url.expiresAt), 'active': !isExpired(url.expiresAt) }">{{ isExpired(url.expiresAt) ? '已过期' : '有效' }}</td>
           </tr>
         </tbody>
       </table>
@@ -110,8 +112,8 @@ export default {
           },
           body: JSON.stringify({
             longUrl: longUrl.value,
-            alias: alias.value || undefined,
-            expirationDate: expirationDate.value || undefined
+            shortCode: alias.value || undefined,
+            expiresAt: expirationDate.value || undefined
           })
         });
         const result = await response.json();
@@ -164,7 +166,15 @@ export default {
 
     const copyToClipboard = async () => {
       try {
-        await navigator.clipboard.writeText(shortUrl.value);
+        const tempInput = document.createElement('input');
+        tempInput.style.position = 'absolute';
+        tempInput.style.left = '-9999px';
+        tempInput.value = shortUrl.value;
+        document.body.appendChild(tempInput);
+        tempInput.select();
+        document.execCommand('copy');
+        document.body.removeChild(tempInput);
+        
         error.value = '';
         const originalShortUrl = shortUrl.value;
         shortUrl.value = '复制成功！';
@@ -175,6 +185,7 @@ export default {
         }, 1500);
       } catch (err) {
         error.value = '复制失败，请手动复制';
+        console.error('复制失败:', err);
       }
     }
 
@@ -185,6 +196,11 @@ export default {
     const formatDate = (dateStr) => {
       if (!dateStr) return '-';
       return new Date(dateStr).toLocaleString('zh-CN');
+    }
+
+    const isExpired = (expiresAt) => {
+      if (!expiresAt) return false;
+      return new Date(expiresAt) < new Date();
     }
 
     onMounted(() => {
@@ -209,7 +225,8 @@ export default {
       searchUrls,
       changePage,
       getFullShortUrl,
-      formatDate
+      formatDate,
+      isExpired
     };
   }
 }
@@ -344,5 +361,15 @@ button:disabled {
   text-align: center;
   padding: 20px;
   color: #666;
+}
+
+.expired {
+  color: #ff4d4f;
+  font-weight: bold;
+}
+
+.active {
+  color: #52c41a;
+  font-weight: bold;
 }
 </style>
